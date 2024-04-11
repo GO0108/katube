@@ -18,6 +18,25 @@ from utils.downsampling import downsampling
 import shutil
 import os
 import logging
+import os
+import ffmpeg
+
+def convert_webm_to_mp3(input_file):
+    # Extrai o diretório e o nome do arquivo do caminho de entrada
+    file_dir, file_name = os.path.split(input_file)
+
+    # Remove a extensão do arquivo e adiciona ".mp3" para criar o nome do arquivo de saída
+    output_file = os.path.join(file_dir, os.path.splitext(file_name)[0] + ".mp3")
+
+    # Cria um processo FFmpeg para ler o arquivo WebM de entrada e gravá-lo como MP3
+    stream = ffmpeg.input(input_file)
+    stream = ffmpeg.output(stream, output_file)
+    ffmpeg.run(stream)
+
+    os.remove(input_file)
+
+
+
 
 ######################################################
 # Logs Config
@@ -155,11 +174,18 @@ def main():
             # Syncronizing text-audio using aeneas
             ######################################################
             print('Syncronizing Text-Audio {} - {}...'.format(i, youtube_link))
+
+            webm_file = video_id + ".webm"
+            webm_file = os.path.join(output_path, video_id, webm_file)
+            convert_webm_to_mp3(webm_file)
+
             json_filename = video_id + ".json"
             audio_filename = video_id + ".mp3"
             json_file = os.path.join(output_path, video_id, json_filename)
             audio_file = os.path.join(output_path, video_id, audio_filename)
+
             if not create_aeneas_json_file(audio_file, text_file, json_file):
+                print("aqui")
                 logging.error('YouTube video syncronizing aeneas json file: ' + youtube_link)
                 log_error_file.write(youtube_link + ': create_aeneas_json_file' + '\n')
                 i += 1
