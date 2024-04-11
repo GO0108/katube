@@ -14,6 +14,19 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from random import randint
+import ffmpeg
+import os
+
+def convert_webm_to_mp3(input_file, output_file):
+    # Cria um processo FFmpeg para ler o arquivo WebM de entrada e gravá-lo como MP3
+    stream = ffmpeg.input(input_file)
+    stream = ffmpeg.output(stream, output_file)
+    ffmpeg.run(stream)
+
+def delete_file(file_path):
+    # Deleta o arquivo especificado pelo caminho do arquivo
+    os.remove(file_path)
+
 
 def my_progress(d):
     '''
@@ -62,11 +75,11 @@ def download_audio_and_subtitles_from_youtube(yt_url, output_path): # function f
 
         ydl_opts = {
             'format': 'bestaudio/best',  
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '320',
-            }],     
+            # 'postprocessors': [{
+            #     'key': 'FFmpegExtractAudio',
+            #     'preferredcodec': 'mp3',
+            #     'preferredquality': '320',
+            # }],     
             'outtmpl': audio,        
             'noplaylist' : True,        
             'progress_hooks': [my_progress],  
