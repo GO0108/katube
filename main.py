@@ -9,34 +9,17 @@ from urllib.parse import parse_qs, urlparse
 from search import search_videos
 from download import download_audio_and_subtitles_from_youtube
 from text_normalization import create_normalized_text_from_subtitles_file
-from synchronization import create_aeneas_json_file
-from audio_segmentation import segment_audio
-from transcribe import convert_audios_samplerate, transcribe_audios
+from segmentation import segment_audio
+from transcribe import convert_audios_samplerate, transcribe_audios, Whisper
+from utils.downsampling import downsampling
 from validation import create_validation_file
 from selection import select
-from utils.downsampling import downsampling
+
 import shutil
 import os
 import logging
-import os
-import ffmpeg
 
-def convert_webm_to_mp3(input_file):
-    # Extrai o diretório e o nome do arquivo do caminho de entrada
-    file_dir, file_name = os.path.split(input_file)
-
-    # Remove a extensão do arquivo e adiciona ".mp3" para criar o nome do arquivo de saída
-    output_file = os.path.join(file_dir, os.path.splitext(file_name)[0] + ".mp3")
-
-    # Cria um processo FFmpeg para ler o arquivo WebM de entrada e gravá-lo como MP3
-    stream = ffmpeg.input(input_file)
-    stream = ffmpeg.output(stream, output_file)
-    ffmpeg.run(stream)
-
-    os.remove(input_file)
-
-
-
+from pyannote.audio import Model
 
 ######################################################
 # Logs Config
@@ -51,6 +34,10 @@ open(log_path, 'w').close()
 
 level = logging.DEBUG # Options: logging.DEBUG | logging.INFO | logging.WARNING | logging.ERROR | logging.CRITICAL
 logging.basicConfig(filename=log_path, filemode='w', format='%(message)s', level=level)
+
+# IMPORTANDO MODELOS!!!!
+model_vad = Model.from_pretrained('pyannote/segmentation', use_auth_token=Config.HF_key)
+model_whisper = Whisper('openai/whisper-tiny')
 
 
 # Argument Parser from File
@@ -115,7 +102,7 @@ def main():
         # Defining output paths
         base_path = os.path.join(Config.base_dir, Config.dest_dir)
         output_path = os.path.join(base_path, Config.orig_base, content_id)
-
+        print(base_path)
         ######################################################
         # Searching all videos from Youtube channel
         ######################################################
@@ -156,6 +143,8 @@ def main():
                 i += 1
                 continue
 
+
+
             ######################################################
             # Normalizing text preparing to syncronizing text-audio
             ######################################################
@@ -170,37 +159,16 @@ def main():
             if Config.delete_temp_files:
                 os.remove(subtitle_file)
 
-            ######################################################
-            # Syncronizing text-audio using aeneas
-            ######################################################
-            print('Syncronizing Text-Audio {} - {}...'.format(i, youtube_link))
 
-            webm_file = video_id + ".webm"
-            webm_file = os.path.join(output_path, video_id, webm_file)
-            convert_webm_to_mp3(webm_file)
-
-            json_filename = video_id + ".json"
+            ######################################################
+            # Segmenting audio
+            ######################################################
             audio_filename = video_id + ".mp3"
-            json_file = os.path.join(output_path, video_id, json_filename)
             audio_file = os.path.join(output_path, video_id, audio_filename)
 
-            if not create_aeneas_json_file(audio_file, text_file, json_file):
-                print("aqui")
-                logging.error('YouTube video syncronizing aeneas json file: ' + youtube_link)
-                log_error_file.write(youtube_link + ': create_aeneas_json_file' + '\n')
-                i += 1
-                continue
-            if Config.delete_temp_files:
-                os.remove(text_file)
 
-            ######################################################
-            # Segmenting audio using aeneas output
-            ######################################################
             print('Segmenting audio {} - {}...'.format(i, youtube_link))
-            wavs_dir  = os.path.join(output_path, video_id, Config.wavs_dir)
-            metadata_subtitles_file = os.path.join(output_path, video_id, Config.metadata_subtitles_file)
-            filename_base = video_id
-            if not segment_audio(audio_file, json_file, wavs_dir, metadata_subtitles_file, filename_base):
+            if not segment_audio(audio_file, output_path , model_vad):
                 logging.error('YouTube video segmenting audio: '  + youtube_link)
                 log_error_file.write(youtube_link + ': segment_audio' + '\n')
                 i += 1
@@ -208,11 +176,13 @@ def main():
             # Removing original audio file
             if Config.delete_temp_files:
                 os.remove(audio_file)
-                os.remove(json_file)
 
-            ######################################################
-            # Converting audios: adjust audios to transcription tool
-            ######################################################
+            # ######################################################
+            # # Converting audios: adjust audios to transcription tool
+            # ######################################################
+                
+            # wavs_dir = os.path.join(output_path, video_id, Config.wavs_dir)
+            wavs_dir = os.path.join(output_path, video_id)
             print('Converting {} - {}...'.format(i, youtube_link))
             tmp_wavs_dir = os.path.join(output_path, video_id, Config.tmp_wavs_dir)
             if not convert_audios_samplerate(wavs_dir, tmp_wavs_dir, Config.tmp_sampling_rate):
@@ -222,11 +192,26 @@ def main():
                 continue
 
             ######################################################
-            # Transcribing: using external ASR api
+            # Transcribing: using Whisper/Wav2Vec/MMS
             ######################################################
             print('Transcribing {} - {}...'.format(i, youtube_link))
             transcription_file = os.path.join(output_path, video_id, Config.transcription_file)
-            if not transcribe_audios(tmp_wavs_dir, transcription_file):
+
+            #por enquanto whisper
+            if not transcribe_audios(wavs_dir, transcription_file, model_whisper):
+                logging.error('YouTube video transcribing: ' + youtube_link)
+                log_error_file.write(youtube_link + ': transcribe_audios' + '\n')
+                # Removing temp dir
+                shutil.rmtree(tmp_wavs_dir, ignore_errors=True)
+                i += 1
+                continue
+            # Removing temp dir
+            shutil.rmtree(tmp_wavs_dir, ignore_errors=True)
+            
+            comparision_file = os.path.join(output_path, video_id, Config.transcription_2_file)
+            
+            # OUTRO MODELO PODE SER INSERIDO AQUI
+            if not transcribe_audios(wavs_dir, comparision_file, model_whisper):
                 logging.error('YouTube video transcribing: ' + youtube_link)
                 log_error_file.write(youtube_link + ': transcribe_audios' + '\n')
                 # Removing temp dir
@@ -242,18 +227,18 @@ def main():
             print('Validating {} - {}...'.format(i, youtube_link))
             basename = wavs_dir
             validation_file = os.path.join(output_path, video_id, Config.validation_file)
-            if not create_validation_file(metadata_subtitles_file, transcription_file, basename, validation_file):
+            if not create_validation_file(comparision_file, transcription_file, basename, validation_file):
                 logging.error('YouTube video calculate distance: ' + youtube_link)
                 log_error_file.write(youtube_link + ': create_validation_file'+ '\n')
                 i += 1
                 continue
             if Config.delete_temp_files:
-                os.remove(metadata_subtitles_file)
+                os.remove(comparision_file)
                 os.remove(transcription_file)
 
-            ######################################################
-            # Selection: selecting only files with similarity (levenshtein) >= Config.minimal_levenshtein_distance
-            ######################################################
+            # ######################################################
+            # # Selection: selecting only files with similarity (levenshtein) >= Config.minimal_levenshtein_distance
+            # ######################################################
             print('Selection {} - {}...'.format(i, youtube_link))
             basename = wavs_dir
             output_filepath = os.path.join(output_path, video_id, Config.result_file)
@@ -274,7 +259,7 @@ def main():
                 log_error_file.write(youtube_link + ': downsampling'+ '\n')
                 i += 1
                 continue
-            shutil.rmtree(os.path.join(output_path, video_id, Config.wavs_dir))
+
             if (os.path.exists(os.path.join(output_path, video_id, Config.tmp_wavs_dir))):
                 os.rename(os.path.join(output_path, video_id, Config.tmp_wavs_dir), os.path.join(output_path, video_id, Config.wavs_dir))
 

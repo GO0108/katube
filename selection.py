@@ -1,9 +1,5 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-#
-# (C) 2021 Frederico Oliveira fred.santos.oliveira(at)gmail.com
-#
-#
+
+
 import argparse
 import sys
 from os import remove
@@ -11,6 +7,7 @@ from os.path import basename, join, split
 
 
 def select(input_csv_file, output_filepath, min_similarity, force):
+
     """
     Given a csv file, selects only files with similarity greater than min_similarity and deletes the others.
 
@@ -70,6 +67,7 @@ def select(input_csv_file, output_filepath, min_similarity, force):
         return False
 
     return True
+
 
 
 def main():

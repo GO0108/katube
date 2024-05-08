@@ -2,9 +2,10 @@ class Config:
     base_dir = './'
     dest_dir = 'output'
     ## serch and ingest
-    api_key = ''
+    api_key = 'AIzaSyAUh28b6RfqDasvTqFLEl5mxwqCno_1jpA'
+    HF_key = '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'
     ## videos origin
-    orig_base = 'channel' # ['channel', 'playlist']
+    orig_base = 'playlist' # ['channel', 'playlist']
     ## Channels and Playlists files
     channels_file = './input/channels_id_example.txt'
     playlists_file = './input/playlists_id.txt'
@@ -29,6 +30,9 @@ class Config:
     tmp_sampling_rate = 16000
     # transcribe
     transcription_file = 'transcript.csv'
+    transcription_2_file = 'transcript_2.csv'
+
+
     #output_converted_wavs_path = '00_16k'
     # validation
     validation_file = 'validation.csv'
