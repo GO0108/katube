@@ -7,19 +7,22 @@
 from config import Config
 from urllib.parse import parse_qs, urlparse
 from search import search_videos
+
 from download import download_audio_and_subtitles_from_youtube
 from text_normalization import create_normalized_text_from_subtitles_file
 from segmentation import segment_audio
-from transcribe import convert_audios_samplerate, transcribe_audios, Whisper
+from transcribe import convert_audios_samplerate, transcribe_audios, Whisper, Wav2Vec
 from utils.downsampling import downsampling
 from validation import create_validation_file
 from selection import select
+from enhance import denoise
 
 import shutil
 import os
 import logging
 
 from pyannote.audio import Model
+from df.enhance import init_df
 
 ######################################################
 # Logs Config
@@ -37,8 +40,9 @@ logging.basicConfig(filename=log_path, filemode='w', format='%(message)s', level
 
 # IMPORTANDO MODELOS!!!!
 model_vad = Model.from_pretrained('pyannote/segmentation', use_auth_token=Config.HF_key)
-model_whisper = Whisper('openai/whisper-tiny')
-
+transcription_model_1 = Whisper()
+transcription_model_2 = Wav2Vec()
+model, df_state, _ = init_df()
 
 # Argument Parser from File
 '''
@@ -197,8 +201,7 @@ def main():
             print('Transcribing {} - {}...'.format(i, youtube_link))
             transcription_file = os.path.join(output_path, video_id, Config.transcription_file)
 
-            #por enquanto whisper
-            if not transcribe_audios(wavs_dir, transcription_file, model_whisper):
+            if not transcribe_audios(wavs_dir, transcription_file, transcription_model_1):
                 logging.error('YouTube video transcribing: ' + youtube_link)
                 log_error_file.write(youtube_link + ': transcribe_audios' + '\n')
                 # Removing temp dir
@@ -211,7 +214,7 @@ def main():
             comparision_file = os.path.join(output_path, video_id, Config.transcription_2_file)
             
             # OUTRO MODELO PODE SER INSERIDO AQUI
-            if not transcribe_audios(wavs_dir, comparision_file, model_whisper):
+            if not transcribe_audios(wavs_dir, comparision_file, transcription_model_2):
                 logging.error('YouTube video transcribing: ' + youtube_link)
                 log_error_file.write(youtube_link + ': transcribe_audios' + '\n')
                 # Removing temp dir
@@ -250,6 +253,22 @@ def main():
             if Config.delete_temp_files:
                 os.remove(validation_file)
 
+
+            ######################################################
+            # Enhancing: enhance quality of audio
+            ######################################################  
+            if not denoise(wavs_dir, model, df_state):
+                logging.error('YouTube video denoise: ' + youtube_link)
+                log_error_file.write(youtube_link + ': denoise_audios' + '\n')
+                # Removing temp dir
+                shutil.rmtree(tmp_wavs_dir, ignore_errors=True)
+                i += 1
+                continue
+            # Removing temp dir
+            shutil.rmtree(tmp_wavs_dir, ignore_errors=True)
+            
+
+            
             ######################################################
             # Downsampling: downsampling wav files
             ######################################################            
@@ -262,7 +281,7 @@ def main():
 
             if (os.path.exists(os.path.join(output_path, video_id, Config.tmp_wavs_dir))):
                 os.rename(os.path.join(output_path, video_id, Config.tmp_wavs_dir), os.path.join(output_path, video_id, Config.wavs_dir))
-
+            
             ######################################################
             # Excluding folders with no wav files
             ######################################################

@@ -10,3 +10,4 @@ deepfilternet==0.5.6
 pyannote.audio==3.1.1
 pydub==0.25.1
 textdistance
+spleeter==2.4.0
