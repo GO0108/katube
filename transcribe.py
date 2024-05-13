@@ -42,7 +42,7 @@ class Wav2Vec():
 
 class Whisper():
 
-    def __init__(self, model_id='large-v3'):
+    def __init__(self, model_id='openai/whisper-large-v3'):
         self.model_id = model_id
         self.processor = AutoProcessor.from_pretrained(self.model_id)
         self.torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
