@@ -7,7 +7,7 @@
 from config import Config
 from urllib.parse import parse_qs, urlparse
 from search import search_videos
-from transcribe import  transcribe_audios, Whisper
+from transcribe import  transcribe_audios, Whisper, Wav2Vec
 from utils.downsampling import downsampling
 from validation import create_validation_file
 from selection import select
@@ -33,7 +33,8 @@ level = logging.DEBUG # Options: logging.DEBUG | logging.INFO | logging.WARNING 
 logging.basicConfig(filename=log_path, filemode='w', format='%(message)s', level=level)
 
 # IMPORTANDO MODELOS!!!!
-model_whisper = Whisper('openai/whisper-tiny')
+transcription_model_1 = Whisper()
+transcription_model_2 = Wav2Vec
 
 
 # Argument Parser from File
@@ -138,7 +139,7 @@ def main():
             transcription_file = os.path.join(output_path, video_id, Config.transcription_file)
 
             #por enquanto whisper
-            if not transcribe_audios(wavs_dir, transcription_file, model_whisper):
+            if not transcribe_audios(wavs_dir, transcription_file, transcription_model_1):
                 logging.error('YouTube video transcribing: ' + youtube_link)
                 log_error_file.write(youtube_link + ': transcribe_audios' + '\n')
                 # Removing temp dir
@@ -151,7 +152,7 @@ def main():
             comparision_file = os.path.join(output_path, video_id, Config.transcription_2_file)
             
             # OUTRO MODELO PODE SER INSERIDO AQUI
-            if not transcribe_audios(wavs_dir, comparision_file, model_whisper):
+            if not transcribe_audios(wavs_dir, comparision_file, transcription_model_2):
                 logging.error('YouTube video transcribing: ' + youtube_link)
                 log_error_file.write(youtube_link + ': transcribe_audios' + '\n')
                 # Removing temp dir
