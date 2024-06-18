@@ -7,8 +7,9 @@
 import argparse
 from os import makedirs
 from os.path import join, exists, dirname
-from textdistance import levenshtein
 from tqdm import tqdm
+
+from textdistance import levenshtein
 
 
 def remove_punctuations(sentence):
@@ -18,10 +19,9 @@ def remove_punctuations(sentence):
     punctuations = '''—!()-[]{};:'"\,<>./?@#$%^&*_~'''
     sentence_with_no_punct = ""
     for char in sentence:
-       if char not in punctuations:
-           sentence_with_no_punct = sentence_with_no_punct + char
+        if char not in punctuations:
+            sentence_with_no_punct += char
     return sentence_with_no_punct.strip()
-
 
 def clear_sentences(sentence):
     """
@@ -30,6 +30,8 @@ def clear_sentences(sentence):
     sentence = sentence.lower()
     clean_sentence = remove_punctuations(sentence)
     return clean_sentence
+
+
 
 
 def create_validation_file(input_file1, input_file2, prefix_filepath, output_file):

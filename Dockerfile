@@ -1,18 +1,23 @@
-# docker build -t ubuntu1604py36
-FROM ubuntu:18.04
+# Use a imagem PyTorch com CUDA e cuDNN como base
+FROM  pytorch/pytorch:2.2.0-cuda11.8-cudnn8-devel
 
-RUN set -x \
-      && apt-get update \
-      && apt-get install -y espeak ffmpeg libespeak-dev libsndfile1 libsndfile1-dev python python-dev python-pip python-numpy python-lxml \
-      && rm -rf /var/lib/apt/lists/*
-RUN apt-get update
-RUN apt-get install -y build-essential python3.6 python3.6-dev python3-pip python3.6-venv sox
-RUN apt-get install -y wget git nano
+# Copie os arquivos necessários para o diretório de trabalho do contêiner
+COPY . /app
 
-# update pip
-RUN python3.6 -m pip install pip --upgrade
-RUN python3.6 -m pip install wheel
+# Defina o diretório de trabalho para o local onde você deseja executar seu código
+WORKDIR /app
 
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
+# Instale as bibliotecas de sistema necessárias, limpe o cache e atualize pip
+RUN apt-get update && apt-get install -y libsndfile1  \
+    && apt-get clean \
+    && apt-get install git -y\
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --upgrade pip
 
-RUN export PYTHONIOENCODING=UTF-8
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade git+https://github.com/huggingface/transformers.git
+
+RUN apt-get update && apt-get install git-lfs \
+    && git-lfs install

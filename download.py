@@ -9,24 +9,11 @@ import sys
 from os import makedirs
 from os.path import join, exists, split
 import time
-import youtube_dl
+import yt_dlp
 from youtube_transcript_api import YouTubeTranscriptApi
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from random import randint
-import ffmpeg
-import os
-
-def convert_webm_to_mp3(input_file, output_file):
-    # Cria um processo FFmpeg para ler o arquivo WebM de entrada e gravá-lo como MP3
-    stream = ffmpeg.input(input_file)
-    stream = ffmpeg.output(stream, output_file)
-    ffmpeg.run(stream)
-
-def delete_file(file_path):
-    # Deleta o arquivo especificado pelo caminho do arquivo
-    os.remove(file_path)
-
 
 def my_progress(d):
     '''
@@ -67,7 +54,7 @@ def download_audio_and_subtitles_from_youtube(yt_url, output_path): # function f
     try:
         # Random time do waiting to avoid youtube access blocking
         t = randint(30,60) 
-        print('Waiting %d seconds ...'%(t))
+        #print('Waiting %d seconds ...'%(t))
         time.sleep(t) # Overcome YouTube blocking
 
         if not (exists(video_dir)):
@@ -75,23 +62,24 @@ def download_audio_and_subtitles_from_youtube(yt_url, output_path): # function f
 
         ydl_opts = {
             'format': 'bestaudio/best',  
-            # 'postprocessors': [{
-            #     'key': 'FFmpegExtractAudio',
-            #     'preferredcodec': 'mp3',
-            #     'preferredquality': '320',
-            # }],     
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '320',
+            }],     
             'outtmpl': audio,        
             'noplaylist' : True,        
             'progress_hooks': [my_progress],  
         }
         # Download audio stream and convert to mp3
-        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([yt_url])
 
         # get video_id from youtube_uri
         video_id = yt_url.replace('https://www.youtube.com/watch?v=','')
         # Download subtitle and write to an .srt file
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
 
         # filter first for manually created transcripts and second for automatically generated ones
         transcript = transcript_list.find_transcript(['pt'])

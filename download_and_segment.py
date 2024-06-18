@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+    #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
 # (C) 2021 Frederico Oliveira fred.santos.oliveira(at)gmail.com
@@ -8,6 +8,8 @@ from config import Config
 from urllib.parse import parse_qs, urlparse
 from search import search_videos
 
+from pydub import AudioSegment
+
 from download import download_audio_and_subtitles_from_youtube
 from text_normalization import create_normalized_text_from_subtitles_file
 from segmentation import segment_audio
@@ -15,7 +17,7 @@ from transcribe import  transcribe_audios, Whisper, Wav2Vec
 from utils.downsampling import downsampling
 from validation import create_validation_file
 from selection import select
-from enhance import convert_audios_samplerate,denoise
+from enhance import convert_audios_samplerate,denoise_audio
 
 import torch
 import shutil
@@ -39,16 +41,13 @@ open(log_path, 'w').close()
 level = logging.DEBUG # Options: logging.DEBUG | logging.INFO | logging.WARNING | logging.ERROR | logging.CRITICAL
 logging.basicConfig(filename=log_path, filemode='w', format='%(message)s', level=level)
 
-# IMPORTANDO MODELOS!!!!
 
 # Carregar o modelo Silero VAD
 model_vad, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', trust_repo=True)
 (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
 vad_iterator = VADIterator(model_vad)
 
-# transcription_model_1 = Whisper()
-transcription_model_2 = Wav2Vec()
-model, df_state, _ = init_df()
+#model, df_state, _ = init_df()
 
 # Argument Parser from File
 '''
@@ -152,9 +151,9 @@ def main():
                 log_error_file.write(youtube_link + ': ingest_dataset' + '\n')
                 i += 1
                 continue
-
-
-
+            
+            
+            
             ######################################################
             # Normalizing text preparing to syncronizing text-audio
             ######################################################
@@ -170,144 +169,69 @@ def main():
                 os.remove(subtitle_file)
 
 
-            audio_filename = video_id + ".mp3"
-            audio_file = os.path.join(output_path, video_id, audio_filename)
+            try:
+ 
+                audio_filename = video_id + ".mp3"
+                audio_file = os.path.join(output_path, video_id, audio_filename)
 
-            os.rename(audio_file, audio_file.replace('.mp3', '.wav'))
-            audio_file = audio_file.replace('.mp3', '.wav')
-            
+                wav_filename = video_id + ".wav"
+                wav_file = os.path.join(output_path, video_id, wav_filename)
+                
 
-            wavs_dir = os.path.join(output_path, video_id)
+                AudioSegment.from_mp3(audio_file).export(wav_file, format="wav")
+                os.remove(audio_file) 
 
-            ######################################################
-            # Enhancing: enhance quality of audio
-            ######################################################  
-            print('Denoising {} - {}...'.format(i, youtube_link))
-            if not denoise(wavs_dir, model, df_state):
-                logging.error('YouTube video denoise: ' + youtube_link)
-                log_error_file.write(youtube_link + ': denoise_audios' + '\n')
+                audio_file = wav_file
+                print('Prosseguindo segmentacao...')
+    
+                wavs_dir = os.path.join(output_path, video_id)
+    
+                ######################################################
+                # Enhancing: enhance quality of audio
+                ######################################################  
+                print('Denoising {} - {}...'.format(i, youtube_link))
+                if not denoise_audio(wavs_dir):
+                    logging.error('YouTube video denoise: ' + youtube_link)
+                    log_error_file.write(youtube_link + ': denoise_audios' + '\n')
+
+                    i += 1
+                    continue
+    
+
+    
+                ######################################################
+                # Segmenting audio
+                ######################################################
+    
+                print('Segmenting audio {} - {}...'.format(i, youtube_link))
+                if not segment_audio(audio_file, output_path , model_vad, vad_iterator):
+                    logging.error('YouTube video segmenting audio: '  + youtube_link)
+                    log_error_file.write(youtube_link + ': segment_audio' + '\n')
+                    i += 1
+                    continue
+                # Removing original audio file
+                if Config.delete_temp_files:
+                    os.remove(audio_file)
+
+                ######################################################
+                # Converting audios: adjust audios to transcription tool
+                ######################################################
+
+                print('Converting {} - {}...'.format(i, youtube_link))
+                tmp_wavs_dir = os.path.join(output_path, video_id, Config.tmp_wavs_dir)
+                if not convert_audios_samplerate(wavs_dir,  Config.tmp_sampling_rate):
+                    logging.error('YouTube video converting audio: ' + youtube_link)
+                    log_error_file.write(youtube_link  + ': convert_audios_samplerate' + '\n')
+                    i += 1
+                    continue
+
                 # Removing temp dir
                 shutil.rmtree(tmp_wavs_dir, ignore_errors=True)
-                i += 1
-                continue
-
-            # ######################################################
-            # # Converting audios: adjust audios to transcription tool
-            # ######################################################
-
-            print('Converting {} - {}...'.format(i, youtube_link))
-            tmp_wavs_dir = os.path.join(output_path, video_id, Config.tmp_wavs_dir)
-            if not convert_audios_samplerate(wavs_dir,  Config.tmp_sampling_rate):
-                logging.error('YouTube video converting audio: ' + youtube_link)
-                log_error_file.write(youtube_link  + ': convert_audios_samplerate' + '\n')
-                i += 1
-                continue
-
-            # Removing temp dir
-            shutil.rmtree(tmp_wavs_dir, ignore_errors=True)
-
-            ######################################################
-            # Segmenting audio
-            ######################################################
-
-            print('Segmenting audio {} - {}...'.format(i, youtube_link))
-            if not segment_audio(audio_file, output_path , model_vad, vad_iterator):
-                logging.error('YouTube video segmenting audio: '  + youtube_link)
-                log_error_file.write(youtube_link + ': segment_audio' + '\n')
-                i += 1
-                continue
-            # Removing original audio file
-            if Config.delete_temp_files:
-                os.remove(audio_file)
 
 
-            ######################################################
-            # Transcribing: using Whisper/Wav2Vec/MMS
-            ######################################################
-            print('Transcribing {} - {}...'.format(i, youtube_link))
-            transcription_file = os.path.join(output_path, video_id, Config.transcription_file)
-
-            if not transcribe_audios(wavs_dir, transcription_file, transcription_model_2):
-                logging.error('YouTube video transcribing: ' + youtube_link)
-                log_error_file.write(youtube_link + ': transcribe_audios' + '\n')
-                # Removing temp dir
-                shutil.rmtree(tmp_wavs_dir, ignore_errors=True)
-                i += 1
-                continue
-            # Removing temp dir
-            shutil.rmtree(tmp_wavs_dir, ignore_errors=True)
-            
-            comparision_file = os.path.join(output_path, video_id, Config.transcription_2_file)
-            
-            # OUTRO MODELO PODE SER INSERIDO AQUI
-            if not transcribe_audios(wavs_dir, comparision_file, transcription_model_2):
-                logging.error('YouTube video transcribing: ' + youtube_link)
-                log_error_file.write(youtube_link + ': transcribe_audios' + '\n')
-                # Removing temp dir
-                shutil.rmtree(tmp_wavs_dir, ignore_errors=True)
-                i += 1
-                continue
-            # Removing temp dir
-            shutil.rmtree(tmp_wavs_dir, ignore_errors=True)
-
-            ######################################################
-            # Validating: using levenshtein distance
-            ######################################################
-            print('Validating {} - {}...'.format(i, youtube_link))
-            basename = wavs_dir
-            validation_file = os.path.join(output_path, video_id, Config.validation_file)
-            if not create_validation_file(comparision_file, transcription_file, basename, validation_file):
-                logging.error('YouTube video calculate distance: ' + youtube_link)
-                log_error_file.write(youtube_link + ': create_validation_file'+ '\n')
-                i += 1
-                continue
-            if Config.delete_temp_files:
-                os.remove(comparision_file)
-                os.remove(transcription_file)
-
-            # ######################################################
-            # # Selection: selecting only files with similarity (levenshtein) >= Config.minimal_levenshtein_distance
-            # ######################################################
-            print('Selection {} - {}...'.format(i, youtube_link))
-            basename = wavs_dir
-            output_filepath = os.path.join(output_path, video_id, Config.result_file)
-            if not select(validation_file, output_filepath, Config.minimal_levenshtein_distance, Config.delete_temp_files):
-                logging.error('YouTube video selection: ' + youtube_link)
-                log_error_file.write(youtube_link + ': selection_file'+ '\n')
-                i += 1
-                continue
-            if Config.delete_temp_files:
-                os.remove(validation_file)
-
-
-            
-            ######################################################
-            # Downsampling: downsampling wav files
-            ######################################################            
-            print('Downsampling {} - {}...'.format(i, youtube_link))
-            if not downsampling(os.path.join(output_path, video_id), Config.wavs_dir, Config.tmp_wavs_dir, Config.sampling_rate, True):
-                logging.error('YouTube video downsampling: ' + youtube_link)
-                log_error_file.write(youtube_link + ': downsampling'+ '\n')
-                i += 1
-                continue
-
-            if (os.path.exists(os.path.join(output_path, video_id, Config.tmp_wavs_dir))):
-                os.rename(os.path.join(output_path, video_id, Config.tmp_wavs_dir), os.path.join(output_path, video_id, Config.wavs_dir))
-            
-            ######################################################
-            # Excluding folders with no wav files
-            ######################################################
-            if not os.path.isdir(wavs_dir) or not os.listdir(wavs_dir):
-                shutil.rmtree(os.path.join(output_path, video_id))
-
-            print('Finish {} - {}...'.format(i, youtube_link))
-
-            # Add youtube_link to already downloaded videos file
-            if Config.downloaded_youtube_videos:
-                with open(Config.downloaded_youtube_videos, 'a', encoding='utf-8') as out:            
-                    out.write(youtube_link + "\n")    
-
-            i += 1 # Next
+            except FileNotFoundError as e:
+                pass
+            i+=1
 
         f.close() #  youtube videos list
 

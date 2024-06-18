@@ -2,12 +2,13 @@ class Config:
     base_dir = './'
     dest_dir = 'output'
     ## serch and ingest
-    api_key = ''
+    api_key = 'AIzaSyAUh28b6RfqDasvTqFLEl5mxwqCno_1jpA'
+    HF_key = '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'
     ## videos origin
     orig_base = 'channel' # ['channel', 'playlist']
     ## Channels and Playlists files
     channels_file = './input/channels_id_example.txt'
-    playlists_file = './input/playlists_id.txt'
+    playlists_file = './input/playlists_id_example.txt'
 
     # Logs
     logs_dir = 'logs'
@@ -26,16 +27,19 @@ class Config:
     metadata_subtitles_file = 'subtitles.csv'
     # convertion to transcribe format
     tmp_wavs_dir = 'wavs_tmp'
-    tmp_sampling_rate = 16000
+    tmp_sampling_rate = 24000
     # transcribe
     transcription_file = 'transcript.csv'
-    #output_converted_wavs_path = '00_16k'
+    transcription_2_file = 'transcript_2.csv'
+
+
+    #output_converted_wavs_path = '00_24k'
     # validation
     validation_file = 'validation.csv'
     # selection
     minimal_levenshtein_distance = 0.9
     # downsampling
-    sampling_rate = 22050
+    sampling_rate = 24000
     # result
     result_file = 'metadata.csv'
     delete_temp_files = True
